@@ -1,16 +1,88 @@
 package uk.engisoc.fiascov2;
 
+import android.Manifest;
+import android.annotation.TargetApi;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.GpsStatus;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.view.View;
+import android.telephony.SmsManager;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.TextView;
 
-public class MainActivity extends AppCompatActivity {
+import org.w3c.dom.Text;
 
+import java.util.Timer;
+import java.util.TimerTask;
+
+class SynchronizedLocation {
+    private Location loc;
+    private Boolean providerEnabled;
+
+    SynchronizedLocation(Location loc) {
+        this.loc = loc;
+        providerEnabled = true;
+    }
+
+    synchronized void setLoc(Location newLoc) {
+        loc = newLoc;
+    }
+
+    // Creates an SMS message containing the information from this location.
+    synchronized String getLocString() {
+        String MSG_TERMINATOR = ";";
+        String DATA_SEPARATOR = ",";
+
+        if (loc == null) {
+            return System.currentTimeMillis() + DATA_SEPARATOR + "No Location!" + MSG_TERMINATOR;
+        }
+
+        return String.valueOf(System.currentTimeMillis()) +
+                DATA_SEPARATOR +
+                loc.getLongitude() +
+                DATA_SEPARATOR +
+                loc.getLatitude() +
+                DATA_SEPARATOR +
+                loc.getAltitude() +
+                DATA_SEPARATOR +
+                loc.getSpeed() +
+                DATA_SEPARATOR +
+                loc.getBearing() +
+                DATA_SEPARATOR +
+                loc.getAccuracy() +
+                DATA_SEPARATOR +
+                loc.getTime() +
+                DATA_SEPARATOR +
+                providerEnabled.toString() +
+                MSG_TERMINATOR;
+    }
+
+    synchronized void setProviderEnabled(boolean val) {
+        this.providerEnabled = val;
+    }
+}
+
+public class MainActivity extends AppCompatActivity implements LocationListener {
+
+    private final static String destinationAddress = "07473424585";
+
+    private final static boolean RUN_AS_DEMON = true;
+    private final static String SMS_THREAD_NAME = "smsThread";
+
+    private final static long INITIAL_DELAY = 0L;
+    private final static long SEND_PERIOD = 10000L; // 1 Second (1000 ms)
+
+    SynchronizedLocation current = null;
+
+    @TargetApi(Build.VERSION_CODES.M)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -18,14 +90,39 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
+        current = new SynchronizedLocation(null);
+
+        LocationManager manager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            System.out.println("No location permission granted!");
+        }
+
+        manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, this);
+
+        Timer smsTimer = new Timer(SMS_THREAD_NAME, RUN_AS_DEMON);
+        smsTimer.scheduleAtFixedRate(
+                new TimerTask() {
+                    @Override
+                    public void run() {
+                        String coords = getCords();
+                        sendSMS(coords);
+                    }
+                }
+
+                , INITIAL_DELAY, SEND_PERIOD);
+    }
+
+    // Called periodically to send an SMS.
+    private void sendSMS(String msg) {
+        SmsManager smsManager = SmsManager.getDefault();
+        smsManager.sendTextMessage(
+                destinationAddress,
+                null,
+                msg,
+                null,
+                null
+        );
     }
 
     @Override
@@ -49,4 +146,39 @@ public class MainActivity extends AppCompatActivity {
 
         return super.onOptionsItemSelected(item);
     }
+
+    // Gets the current coordinates of the phone.
+    private String getCords() {
+        return current.getLocString();
+
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        TextView tv = (TextView) findViewById(R.id.statusLabel);
+        if (location != null){
+            tv.setText("Status: Location acquired!");
+        } else {
+            tv.setText("Status: No Location!");
+        }
+
+
+        current.setLoc(location);
+    }
+
+    @Override
+    public void onStatusChanged(String s, int i, Bundle bundle) {
+        // TODO
+    }
+
+    @Override
+    public void onProviderEnabled(String s) {
+        current.setProviderEnabled(true);
+    }
+
+    @Override
+    public void onProviderDisabled(String s) {
+        current.setProviderEnabled(false);
+    }
+
 }
