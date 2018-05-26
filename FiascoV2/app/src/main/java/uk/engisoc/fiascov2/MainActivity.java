@@ -98,7 +98,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             System.out.println("No location permission granted!");
         }
 
-        manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, this);
+        final long minTime = 500;
+        final long minDistance = 0;
+
+        manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, minDistance, this);
+        manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, minTime, minDistance, this);
 
         Timer smsTimer = new Timer(SMS_THREAD_NAME, RUN_AS_DEMON);
         smsTimer.scheduleAtFixedRate(
@@ -155,6 +159,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     @Override
     public void onLocationChanged(Location location) {
+        System.out.println("Location changed!");
+
         TextView tv = (TextView) findViewById(R.id.statusLabel);
         if (location != null){
             tv.setText("Status: Location acquired!");
@@ -162,22 +168,24 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             tv.setText("Status: No Location!");
         }
 
-
         current.setLoc(location);
     }
 
     @Override
     public void onStatusChanged(String s, int i, Bundle bundle) {
+        System.out.println("Status changed!");
         // TODO
     }
 
     @Override
     public void onProviderEnabled(String s) {
+        System.out.println("Provider Enabled!");
         current.setProviderEnabled(true);
     }
 
     @Override
     public void onProviderDisabled(String s) {
+        System.out.println("Provider Disabled!");
         current.setProviderEnabled(false);
     }
 
