@@ -4,7 +4,10 @@ import android.Manifest;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.location.GpsStatus;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -18,18 +21,36 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
 
-import org.w3c.dom.Text;
-
 import java.util.Timer;
 import java.util.TimerTask;
 
-class SynchronizedLocation {
+class SynchronizedData {
     private Location loc;
+
+    private float lastPressure;
+    private float lastTemp;
+    private float lastGravity;
+
     private Boolean providerEnabled;
 
-    SynchronizedLocation(Location loc) {
+    SynchronizedData(Location loc) {
         this.loc = loc;
+        lastPressure = 0;
+        lastTemp = 0;
+        lastGravity = 0;
         providerEnabled = true;
+    }
+
+    synchronized  void setPressure(float pressure){
+        lastPressure = pressure;
+    }
+
+    synchronized void setTemp (float temp){
+        lastTemp = temp;
+    }
+
+    synchronized void setGravity (float gravity){
+        lastGravity = gravity;
     }
 
     synchronized void setLoc(Location newLoc) {
@@ -62,6 +83,12 @@ class SynchronizedLocation {
                 loc.getTime() +
                 DATA_SEPARATOR +
                 providerEnabled.toString() +
+                DATA_SEPARATOR +
+                lastTemp +
+                DATA_SEPARATOR +
+                lastGravity +
+                DATA_SEPARATOR +
+                lastPressure +
                 MSG_TERMINATOR;
     }
 
@@ -70,7 +97,7 @@ class SynchronizedLocation {
     }
 }
 
-public class MainActivity extends AppCompatActivity implements LocationListener {
+public class MainActivity extends AppCompatActivity implements LocationListener{
 
     private final static String[] destinationAddresses = {"07473424585", "07591849894"};
 
@@ -80,7 +107,16 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     private final static long INITIAL_DELAY = 0L;
     private final static long SEND_PERIOD = 10000L; // 1 Second (1000 ms)
 
-    SynchronizedLocation current = null;
+    SynchronizedData current = null;
+
+    private SensorManager enviromentSensorManager;
+    private Sensor pressureSensor;
+    private Sensor tempSensor;
+    private Sensor gravitySensor;
+
+    private SensorEventListener pressureListener = null;
+    private SensorEventListener tempListener = null;
+    private SensorEventListener gravityListener = null;
 
     @TargetApi(Build.VERSION_CODES.M)
     @Override
@@ -90,7 +126,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        current = new SynchronizedLocation(null);
+        current = new SynchronizedData(null);
 
         LocationManager manager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
 
@@ -103,6 +139,50 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, minDistance, this);
         manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, minTime, minDistance, this);
+
+        enviromentSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+
+        if (enviromentSensorManager != null){
+            pressureSensor = enviromentSensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE);
+            tempSensor = enviromentSensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE);
+            gravitySensor = enviromentSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
+        }
+
+        pressureListener = new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent sensorEvent) {
+                current.setPressure(sensorEvent.values[0]);
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int i) {
+
+            }
+        };
+
+        gravityListener = new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent sensorEvent) {
+                current.setGravity(sensorEvent.values[0]);
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int i) {
+
+            }
+        };
+
+        tempListener = new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent sensorEvent) {
+                current.setTemp(sensorEvent.values[0]);
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int i) {
+
+            }
+        };
 
         Timer smsTimer = new Timer(SMS_THREAD_NAME, RUN_AS_DEMON);
         smsTimer.scheduleAtFixedRate(
@@ -191,4 +271,31 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         current.setProviderEnabled(false);
     }
 
+    @Override
+    protected void onResume(){
+        super.onResume();
+        if (pressureListener != null){
+            enviromentSensorManager.registerListener(pressureListener, pressureSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if (gravityListener != null){
+            enviromentSensorManager.registerListener(gravityListener, gravitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if (tempListener != null){
+            enviromentSensorManager.registerListener(tempListener, tempSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (pressureListener != null){
+            enviromentSensorManager.unregisterListener(pressureListener);
+        }
+        if (gravityListener != null){
+            enviromentSensorManager.unregisterListener(gravityListener);
+        }
+        if (tempListener != null){
+            enviromentSensorManager.unregisterListener(tempListener);
+        }
+    }
 }
